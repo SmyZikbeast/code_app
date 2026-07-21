@@ -1,6 +1,7 @@
 package DataBaseInteractor;
 
 import Enums.Difficulty;
+import Handlers.SessionHandler;
 import Resources.Task;
 import Resources.TaskPreview;
 import interfaces.*;
@@ -12,21 +13,18 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 
 
-public class TaskRepository implements gettable, uploadable, deletable, updatable {
+public class TaskRepository implements Gettable, Uploadable, Deletable, Updatable {
     Connection connection;
-
+    SessionRepository sessionRepository = new SessionRepository();
     public TaskRepository() throws SQLException {
-        connection = DatabaseConnector.connect();
-        String sql = "CREATE TABLE IF NOT EXISTS TASKS(id SERIAL PRIMARY KEY, " +
-                "name VARCHAR(100) NOT NULL, " +
-                "description VARCHAR(1000), " +
-                "difficulty VARCHAR(20))";
-        PreparedStatement stmt = connection.prepareStatement(sql);
-        stmt.execute();
+        this.connection = DatabaseConnector.connect();
     }
 
     @Override
-    public Task getTask(int id) throws SQLException {
+    public Task getTask(int id, String token) throws SQLException {
+        if(sessionRepository.validateToken(token) == 0){
+            return null;
+        }
         String sql = "SELECT * FROM TASKS WHERE TASKS.ID = ?";
         try(PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setInt(1, id);
@@ -37,13 +35,16 @@ public class TaskRepository implements gettable, uploadable, deletable, updatabl
             return new Task(resultSet.getInt("id"),
                     resultSet.getString("name"),
                     resultSet.getString("description"),
-                    resultSet.getObject("difficulty", Difficulty.class)
+                    Difficulty.valueOf(resultSet.getString("difficulty"))
             );
         }
     }
 
     @Override
-    public TaskPreview[] getTasks(){
+    public TaskPreview[] getTasks(String token){
+        if(sessionRepository.validateToken(token) == 0){
+            return null;
+        }
         ArrayList<TaskPreview> tasks = new ArrayList<>();
         String sql = "SELECT id, name, difficulty FROM TASKS";
         try(PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -51,7 +52,7 @@ public class TaskRepository implements gettable, uploadable, deletable, updatabl
             while(rs.next()){
                 tasks.add(new TaskPreview(rs.getInt("id"),
                                           rs.getString("name"),
-                                          rs.getObject("difficulty", Difficulty.class)));
+                                          Difficulty.valueOf(rs.getString("difficulty"))));
             }
         }
         catch (Exception e){
@@ -61,7 +62,13 @@ public class TaskRepository implements gettable, uploadable, deletable, updatabl
         return tasks.toArray(TaskPreview[]::new);
     }
     @Override
-    public boolean deleteTask(int id){
+    public boolean deleteTask(int id, String token){
+        int sessionUserId = sessionRepository.validateToken(token);
+        if(sessionUserId == 0){
+            return false;
+        }
+
+        //todo: валидация пользователя
         String sql = "DELETE FROM TASKS WHERE id = ?";
         try(PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setInt(1, id);
@@ -73,8 +80,27 @@ public class TaskRepository implements gettable, uploadable, deletable, updatabl
         }
     }
     @Override
-    public boolean updateTask(Task task, int id){
-        String sql = "UPDATE TASKS SET " +
+    public boolean updateTask(Task task, int id, String token){
+        int sessionUserId = sessionRepository.validateToken(token);
+        if(sessionUserId == 0){
+            return false;
+        }
+        int owner_id;
+        String sql = "SELECT owner_id FROM TASKS WHERE id = ?";
+        try(PreparedStatement stmt = connection.prepareStatement(sql)){
+            stmt.setInt(1, id);
+            ResultSet rs = stmt.executeQuery();
+            owner_id = rs.getInt("owner_id");
+        }
+        catch (Exception e){
+            System.out.println("Problem in updateTask() method of TaskRepository class!");
+            return false;
+        }
+        if (owner_id != sessionUserId){
+            System.out.println("no permission to update task!");
+            return false;
+        }
+        sql = "UPDATE TASKS SET " +
                 "name = ?, " +
                 "description = ?, " +
                 "difficulty = ? WHERE " +
@@ -93,13 +119,17 @@ public class TaskRepository implements gettable, uploadable, deletable, updatabl
         }
     }
     @Override
-    public boolean uploadTask(Task task){
-        String sql = "INSERT INTO TASKS VALUES(id = ?, name = ?, description = ?, difficulty = ?)";
+    public boolean uploadTask(Task task, String token){
+        int sessionUserId = sessionRepository.validateToken(token);
+        if(sessionUserId == 0){
+            return false;
+        }
+        String sql = "INSERT INTO TASKS(name, description, difficulty, owner_id) VALUES(?, ?, ?, ?)";
         try(PreparedStatement stmt = connection.prepareStatement(sql)){
-            stmt.setInt(1, task.getId());
-            stmt.setString(2, task.getName());
-            stmt.setString(3, task.getDescription());
-            stmt.setString(4, task.getDifficulty().name());
+            stmt.setString(1, task.getName());
+            stmt.setString(2, task.getDescription());
+            stmt.setString(3, task.getDifficulty().name());
+            stmt.setInt(4, sessionUserId);
             int added = stmt.executeUpdate();
             return added > 0;
         }

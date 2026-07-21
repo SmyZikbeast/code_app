@@ -7,4 +7,7 @@ public class ReadTaskResponse {
     public ReadTaskResponse(Task task){
         this.task = task;
     }
+    public Task getTask(){
+        return this.task;
+    }
 }

@@ -2,13 +2,8 @@ package Requests;
 
 import Resources.Task;
 
-public class TaskUpdateRequest extends Request{
-    int id;
-    public TaskUpdateRequest(Task task, int id){
+public class TaskUpdateRequest extends TaskRequest{
+    public TaskUpdateRequest(Task task){
         this.task = task;
-        this.id = id;
-    }
-    public int getId(){
-        return this.id;
     }
 }

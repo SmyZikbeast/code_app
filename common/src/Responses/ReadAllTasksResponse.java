@@ -8,4 +8,8 @@ public class ReadAllTasksResponse {
     public ReadAllTasksResponse(TaskPreview[] tasks){
         this.tasks = tasks;
     }
+
+    public TaskPreview[] getTasks() {
+        return tasks;
+    }
 }

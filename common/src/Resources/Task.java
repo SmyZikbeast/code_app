@@ -3,13 +3,18 @@ package Resources;
 import Enums.Difficulty;
 
 public class Task {
-    int id;
+    int id = 0;
     String name;
     String description;
     Difficulty difficulty;
     public Task(){};
     public Task(int id, String name, String desc, Difficulty difficulty){
         this.id = id;
+        this.name = name;
+        this.description = desc;
+        this.difficulty = difficulty;
+    }
+    public Task(String name, String desc, Difficulty difficulty){
         this.name = name;
         this.description = desc;
         this.difficulty = difficulty;
@@ -38,6 +43,7 @@ public class Task {
     public String toString(){
         return "id: " + this.id + "\n" +
                 "name: "+ this.name + "\n" +
-                "description:" + this.description;
+                "description: " + this.description + "\n" +
+                "difficulty: " + this.difficulty.name();
     }
 }

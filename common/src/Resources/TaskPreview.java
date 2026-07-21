@@ -11,4 +11,7 @@ public class TaskPreview {
         this.name = name;
         this.difficulty = difficulty;
     }
+    public String toString(){
+        return this.id + " " + this.name + " " + this.difficulty.name();
+    }
 }
