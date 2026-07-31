@@ -1,0 +1,15 @@
+package Enums;
+
+public enum Code {
+    OK,
+    CREATED,
+    NO_CONTENT,
+    BAD_REQUEST,
+    WRONG_PASSWORD,
+    UNAUTHORIZED,
+    TOKEN_EXPIRED,
+    NO_PERMISSION,
+    USERNAME_TAKEN,
+    NOT_FOUND,
+    SERVER_ERROR
+}

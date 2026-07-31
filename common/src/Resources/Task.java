@@ -28,6 +28,7 @@ public class Task {
     public void setDescription(String desc){
         this.description = desc;
     }
+    public void setDifficulty(Difficulty difficulty){ this.difficulty = difficulty;}
     public int getId(){
         return this.id;
     }

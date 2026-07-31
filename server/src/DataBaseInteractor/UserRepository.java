@@ -1,7 +1,9 @@
 package DataBaseInteractor;
 
+import Enums.Code;
 import Requests.RegistrationRequest;
 import Requests.UserUpdateRequest;
+import Resources.RepositoryResponse;
 import org.mindrot.jbcrypt.BCrypt;
 
 import java.sql.Connection;
@@ -9,50 +11,59 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import static Enums.Code.*;
+
 public class UserRepository {
     Connection connection;
     SessionRepository sessionRepository = new SessionRepository();
     public UserRepository() throws SQLException {
         this.connection = DatabaseConnector.connect();
     }
-    public int register(RegistrationRequest requestWrapper) {
+    public RepositoryResponse<Integer> register(RegistrationRequest requestWrapper) {
         String username = requestWrapper.getUser().getUsername();
         String password = requestWrapper.getUser().getPassword();
         String hashed = BCrypt.hashpw(password, BCrypt.gensalt());
-        try {
-            String sql = "SELECT * FROM USERS WHERE USERS.username = ?";
-            PreparedStatement stmt = connection.prepareStatement(sql);
+        String sql = "SELECT * FROM USERS WHERE USERS.username = ?";
+        try(PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, username);
             ResultSet rs = stmt.executeQuery();
-            if(rs.next()){
-                return 0;
+            if (rs.next()) {
+                return new RepositoryResponse<>(USERNAME_TAKEN);
             }
+        } catch(Exception e){
+            System.out.println("problem in register method of userRepository class");
+            return new RepositoryResponse<>(SERVER_ERROR);
+        }
 
-            sql = "INSERT INTO USERS(username, password) VALUES(?, ?)";
-            stmt = connection.prepareStatement(sql);
+        sql = "INSERT INTO USERS(username, password) VALUES(?, ?)";
+        try(PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, username);
             stmt.setString(2, hashed);
             stmt.executeUpdate();
+        } catch(Exception e){
+            System.out.println("problem in register method of userRepository class");
+            return new RepositoryResponse<>(SERVER_ERROR);
+        }
 
-            sql = "SELECT id FROM USERS WHERE USERS.username = ?";
-            stmt = connection.prepareStatement(sql);
+        sql = "SELECT id FROM USERS WHERE USERS.username = ?";
+        try(PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, username);
-            rs = stmt.executeQuery();
+            ResultSet rs = stmt.executeQuery();
             if (rs.next()){
-                return rs.getInt("id");
+                return new RepositoryResponse<>(OK, rs.getInt("id"));
             }
-            return 0;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
         catch(Exception e){
             System.out.println("problem in register method of userRepository class");
-            return 0;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
     }
 
-    public boolean update(UserUpdateRequest requestWrapper, String token) {
-        int sessionUserId = sessionRepository.validateToken(token);
-        if(sessionUserId == 0){
-            return false;
+    public RepositoryResponse<Void> update(UserUpdateRequest requestWrapper, String token) {
+        Code code = sessionRepository.validateToken(token).getCode();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
         }
         String username = requestWrapper.getUser().getUsername();
         String password = requestWrapper.getUser().getPassword();
@@ -61,21 +72,14 @@ public class UserRepository {
         PreparedStatement stmt;
         ResultSet rs;
         try {
-            sql = "SELECT user_id FROM SESSIONS WHERE token = ?";
-            stmt = connection.prepareStatement(sql);
-            stmt.setString(1, token);
-            rs = stmt.executeQuery();
-            if(!rs.next()) {
-                return false;
-            }
-            int id = rs.getInt("user_id");
+            int id = sessionRepository.validateToken(token).getBody();
             sql = "SELECT id FROM USERS WHERE username = ?";
             stmt = connection.prepareStatement(sql);
             stmt.setString(1, username);
             rs = stmt.executeQuery();
             if (rs.next()){
                 if(rs.getInt("id") != id){
-                    return false;
+                    return new RepositoryResponse<>(USERNAME_TAKEN);
                 }
             }
             sql = "UPDATE USERS SET username = ?, password = ? WHERE id = ?";
@@ -83,41 +87,42 @@ public class UserRepository {
             stmt.setString(1, username);
             stmt.setString(2, hashed);
             stmt.setInt(3, id);
-            return stmt.executeUpdate() > 0;
+            int changed = stmt.executeUpdate();
+            if (changed > 0){
+                return new RepositoryResponse<>(NO_CONTENT);
+            }
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
         catch (Exception e){
             System.out.println("problem in update method of userRepository class");
-            return false;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
     }
 
-    public boolean delete(int id, String token) {
-        int sessionUserId = sessionRepository.validateToken(token);
-        if(sessionUserId == 0){
-            return false;
+    public RepositoryResponse<Void> delete(int id, String token) {
+        int sessionUserId = sessionRepository.validateToken(token).getBody();
+        Code code = sessionRepository.validateToken(token).getCode();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
         }
-        //todo: посмотреть все ли тут ок
+        if(id != sessionUserId){
+            return new RepositoryResponse<>(NO_PERMISSION);
+        }
         String sql;
         PreparedStatement stmt;
-        ResultSet rs;
         try {
-            sql = "SELECT user_id FROM SESSIONS WHERE token = ?";
-            stmt = connection.prepareStatement(sql);
-            stmt.setString(1, token);
-            rs = stmt.executeQuery();
-            if(!rs.next()) {
-                return false;
-            }
-            int userId = rs.getInt("user_id");
-
             sql = "DELETE FROM USERS WHERE id = ?";
             stmt = connection.prepareStatement(sql);
-            stmt.setInt(1, userId);
-            return stmt.executeUpdate() > 0;
+            stmt.setInt(1, sessionUserId);
+            int changed = stmt.executeUpdate();
+            if (changed > 0){
+                return new RepositoryResponse<>(NO_CONTENT);
+            }
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
         catch (Exception e){
             System.out.println("problem in delete method of userRepository class");
-            return false;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
     }
 }

@@ -1,7 +1,8 @@
 package DataBaseInteractor;
 
+import Enums.Code;
 import Enums.Difficulty;
-import Handlers.SessionHandler;
+import Resources.RepositoryResponse;
 import Resources.Task;
 import Resources.TaskPreview;
 import interfaces.*;
@@ -12,6 +13,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 
+import static Enums.Code.*;
+
 
 public class TaskRepository implements Gettable, Uploadable, Deletable, Updatable {
     Connection connection;
@@ -21,29 +24,33 @@ public class TaskRepository implements Gettable, Uploadable, Deletable, Updatabl
     }
 
     @Override
-    public Task getTask(int id, String token) throws SQLException {
-        if(sessionRepository.validateToken(token) == 0){
-            return null;
+    public RepositoryResponse<Task> getTask(int id, String token) throws SQLException {
+        Code code = sessionRepository.validateToken(token).getCode();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
         }
         String sql = "SELECT * FROM TASKS WHERE TASKS.ID = ?";
         try(PreparedStatement stmt = connection.prepareStatement(sql)) {
             stmt.setInt(1, id);
             ResultSet resultSet = stmt.executeQuery();
             if (!resultSet.next()) {
-                return null;
+                return new RepositoryResponse<>(NOT_FOUND);
             }
-            return new Task(resultSet.getInt("id"),
+            return new RepositoryResponse<>(OK,
+                    new Task (resultSet.getInt("id"),
                     resultSet.getString("name"),
                     resultSet.getString("description"),
                     Difficulty.valueOf(resultSet.getString("difficulty"))
+                )
             );
         }
     }
 
     @Override
-    public TaskPreview[] getTasks(String token){
-        if(sessionRepository.validateToken(token) == 0){
-            return null;
+    public RepositoryResponse<TaskPreview[]> getTasks(String token){
+        Code code = sessionRepository.validateToken(token).getCode();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
         }
         ArrayList<TaskPreview> tasks = new ArrayList<>();
         String sql = "SELECT id, name, difficulty FROM TASKS";
@@ -56,49 +63,66 @@ public class TaskRepository implements Gettable, Uploadable, Deletable, Updatabl
             }
         }
         catch (Exception e){
-            System.out.println("problem in getTasks() method of TaskRepository class!");
-            return null;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
-        return tasks.toArray(TaskPreview[]::new);
+        return new RepositoryResponse<>(OK, tasks.toArray(TaskPreview[]::new));
     }
-    @Override
-    public boolean deleteTask(int id, String token){
-        int sessionUserId = sessionRepository.validateToken(token);
-        if(sessionUserId == 0){
-            return false;
-        }
 
-        //todo: валидация пользователя
-        String sql = "DELETE FROM TASKS WHERE id = ?";
-        try(PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setInt(1, id);
-            int deleted = stmt.executeUpdate();
-            return deleted > 0;
-        } catch (SQLException e) {
-            System.out.println("problem in deleteTask() method of TaskRepository class!");
-            return false;
-        }
-    }
     @Override
-    public boolean updateTask(Task task, int id, String token){
-        int sessionUserId = sessionRepository.validateToken(token);
-        if(sessionUserId == 0){
-            return false;
+    public RepositoryResponse<Void> deleteTask(int id, String token){
+        Code code = sessionRepository.validateToken(token).getCode();
+        int userId = sessionRepository.validateToken(token).getBody();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
         }
-        int owner_id;
         String sql = "SELECT owner_id FROM TASKS WHERE id = ?";
         try(PreparedStatement stmt = connection.prepareStatement(sql)){
             stmt.setInt(1, id);
             ResultSet rs = stmt.executeQuery();
-            owner_id = rs.getInt("owner_id");
+            if (!rs.next()){
+                return new RepositoryResponse<>(NOT_FOUND);
+            }
+            int owner_id = rs.getInt("owner_id");
+            if (owner_id != userId){
+                return new RepositoryResponse<>(NO_PERMISSION);
+            }
+        } catch (SQLException e){
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
-        catch (Exception e){
-            System.out.println("Problem in updateTask() method of TaskRepository class!");
-            return false;
+        sql = "DELETE FROM TASKS WHERE id = ?";
+        try(PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setInt(1, id);
+            int deleted = stmt.executeUpdate();
+            if (deleted > 0){
+                return new RepositoryResponse<>(OK);
+            }
+            return new RepositoryResponse<>(NOT_FOUND);
+        } catch (SQLException e) {
+            System.out.println("problem in deleteTask() method of TaskRepository class!");
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
-        if (owner_id != sessionUserId){
-            System.out.println("no permission to update task!");
-            return false;
+    }
+
+    @Override
+    public RepositoryResponse<Void> updateTask(Task task, int id, String token){
+        Code code = sessionRepository.validateToken(token).getCode();
+        int userId = sessionRepository.validateToken(token).getBody();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
+        }
+        String sql = "SELECT owner_id FROM TASKS WHERE id = ?";
+        try(PreparedStatement stmt = connection.prepareStatement(sql)){
+            stmt.setInt(1, id);
+            ResultSet rs = stmt.executeQuery();
+            if (!rs.next()){
+                return new RepositoryResponse<>(NOT_FOUND);
+            }
+            int ownerId = rs.getInt("owner_id");
+            if (ownerId != userId){
+                return new RepositoryResponse<>(NO_PERMISSION);
+            }
+        } catch (SQLException e){
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
         sql = "UPDATE TASKS SET " +
                 "name = ?, " +
@@ -111,31 +135,39 @@ public class TaskRepository implements Gettable, Uploadable, Deletable, Updatabl
             stmt.setString(3, task.getDifficulty().name());
             stmt.setInt(4, id);
             int updated = stmt.executeUpdate();
-            return updated > 0;
+            if (updated > 0){
+                return new RepositoryResponse<>(OK);
+            }
+            return new RepositoryResponse<>(NOT_FOUND);
         }
         catch(SQLException e){
             System.out.println("Problem in updateTask() method of TaskRepository class!");
-            return false;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
     }
+
     @Override
-    public boolean uploadTask(Task task, String token){
-        int sessionUserId = sessionRepository.validateToken(token);
-        if(sessionUserId == 0){
-            return false;
+    public RepositoryResponse<Void> uploadTask(Task task, String token){
+        Code code = sessionRepository.validateToken(token).getCode();
+        int userId = sessionRepository.validateToken(token).getBody();
+        if(code != OK){
+            return new RepositoryResponse<>(code);
         }
         String sql = "INSERT INTO TASKS(name, description, difficulty, owner_id) VALUES(?, ?, ?, ?)";
         try(PreparedStatement stmt = connection.prepareStatement(sql)){
             stmt.setString(1, task.getName());
             stmt.setString(2, task.getDescription());
             stmt.setString(3, task.getDifficulty().name());
-            stmt.setInt(4, sessionUserId);
+            stmt.setInt(4, userId);
             int added = stmt.executeUpdate();
-            return added > 0;
+            if (added > 0){
+                return new RepositoryResponse<>(OK);
+            }
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
         catch (SQLException e){
             System.out.println("problem in uploadTask() method of TaskRepository class");
-            return false;
+            return new RepositoryResponse<>(SERVER_ERROR);
         }
     }
 }

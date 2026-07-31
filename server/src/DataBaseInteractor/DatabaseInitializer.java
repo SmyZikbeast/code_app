@@ -8,7 +8,6 @@ public class DatabaseInitializer {
     public static void initialize(){
         try(Connection connection = DatabaseConnector.connect()) {
 
-
             String sql = "CREATE TABLE IF NOT EXISTS USERS(id SERIAL PRIMARY KEY, " +
                     "username VARCHAR NOT NULL, " +
                     "password VARCHAR NOT NULL)";

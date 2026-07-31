@@ -1,8 +1,9 @@
 package Handlers;
 
 import DataBaseInteractor.SessionRepository;
+import Enums.Code;
 import Requests.AuthorizationRequest;
-import Responses.AuthorizationResponse;
+import Resources.RepositoryResponse;
 import Responses.Response;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
@@ -23,19 +24,24 @@ public class SessionHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "http://localhost:5173");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Session-Token");
         try {
             String method = exchange.getRequestMethod();
             switch (method) {
                 case "POST" -> post(exchange); // authorization
                 case "GET" -> get(exchange);
-                case "PUT" -> put(exchange); // continue session
-                case "DELETE" -> delete(exchange); // close session
+                case "PUT" -> put(exchange);
+                case "DELETE" -> delete(exchange);
+                case "OPTIONS" -> options(exchange);
                 default -> error(exchange);
             }
         }
         catch (Exception e){
-            Response.send(exchange, 500, "");
+            Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
             System.out.println("problem in SessionHandler class");
+            e.printStackTrace();
         }
 
     }
@@ -46,29 +52,27 @@ public class SessionHandler implements HttpHandler {
                     is.readAllBytes(),
                     StandardCharsets.UTF_8
             );
-            AuthorizationRequest requestWrapper = gson.fromJson(body, AuthorizationRequest.class);
-            String token = repository.authorize(requestWrapper);
-            if (token != null){
-                Response.send(exchange, 200, gson.toJson(new AuthorizationResponse(token)));
-            }
-            else{
-                Response.send(exchange, 401, "");
-            }
+            AuthorizationRequest request = gson.fromJson(body, AuthorizationRequest.class);
+            RepositoryResponse<String> response = repository.authorize(request);
+            Response.send(exchange, response);
         }
         catch (IOException e) {
             System.out.println("problem in post method of SessionHandler class");
         }
     }
     public void get(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 405, "");
+        //Response.send(exchange, 405, "");
     }
     public void put(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 405, "");
+        //Response.send(exchange, 405, "");
     }
     public void delete(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 405, "");
+        //Response.send(exchange, 405, "");
     }
     public void error(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 405, "");
+        //Response.send(exchange, 405, "");
+    }
+    public void options(HttpExchange exchange) throws IOException {
+        Response.send(exchange, new RepositoryResponse<>(Code.OK));
     }
 }

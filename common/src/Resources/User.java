@@ -4,7 +4,7 @@ public class User {
     int id = 0;
     String username;
     String password;
-
+    public User(){}
     public User(String name, String password) {
         this.username = name;
         this.password = password;
@@ -23,4 +23,6 @@ public class User {
     public String getPassword(){
         return this.password;
     }
+    public void setUsername(String username){this.username = username;}
+    public void setPassword(String password){this.password = password;}
 }

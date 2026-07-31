@@ -1,7 +1,8 @@
 package interfaces;
 
+import Resources.RepositoryResponse;
 import Resources.Task;
 
 public interface Updatable {
-    boolean updateTask(Task task, int id, String token);
+    RepositoryResponse updateTask(Task task, int id, String token);
 }

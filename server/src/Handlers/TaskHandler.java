@@ -1,12 +1,12 @@
 package Handlers;
 
 import DataBaseInteractor.TaskRepository;
+import Enums.Code;
 import Requests.TaskCreateRequest;
 import Requests.TaskUpdateRequest;
+import Resources.RepositoryResponse;
 import Resources.Task;
 import Resources.TaskPreview;
-import Responses.ReadAllTasksResponse;
-import Responses.ReadTaskResponse;
 import Responses.Response;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
@@ -28,6 +28,9 @@ public class TaskHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "http://localhost:5173");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Session-Token");
         try {
             String method = exchange.getRequestMethod();
             switch (method) {
@@ -35,11 +38,14 @@ public class TaskHandler implements HttpHandler {
                 case "POST" -> post(exchange);
                 case "PUT" -> put(exchange);
                 case "DELETE" -> delete(exchange);
+                case "OPTIONS" -> options(exchange);
                 default -> error(exchange);
             }
         }
         catch(Exception e){
-            Response.send(exchange, 500, "");
+            System.out.println("fell to exception");
+            e.printStackTrace();
+            Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
         }
     }
 
@@ -47,28 +53,22 @@ public class TaskHandler implements HttpHandler {
         URI uri = exchange.getRequestURI();
         String path = uri.getPath();
         String[] tokens = path.split("/");
-
         if(tokens.length == 3){
-            TaskPreview[] tasks = repository.getTasks(exchange.getRequestHeaders().getFirst("Session-token"));
-            ReadAllTasksResponse wrapper = new ReadAllTasksResponse(tasks);
-            Response.send(exchange, 200, gson.toJson(wrapper));
+            RepositoryResponse<TaskPreview[]> tasks = repository.getTasks(exchange.getRequestHeaders().getFirst("Session-Token"));
+            Response.send(exchange, tasks);
         }
         if(tokens.length == 4){
             String id = tokens[3];
             try {
-                Task task = repository.getTask(Integer.parseInt(id), exchange.getRequestHeaders().getFirst("Session-token"));
-                if (task == null){
-                    Response.send(exchange, 404, "");
-                }
-                else {
-                    ReadTaskResponse wrapper = new ReadTaskResponse(task);
-                    Response.send(exchange, 200, gson.toJson(wrapper));
-                }
+                RepositoryResponse<Task> task = repository.getTask(Integer.parseInt(id), exchange.getRequestHeaders().getFirst("Session-Token"));
+                Response.send(exchange, task);
             }
             catch (NumberFormatException e){
-                Response.send(exchange, 404, "");
+                System.out.println("nfe");
+                Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
             } catch (SQLException e) {
-                throw new RuntimeException(e);
+                System.out.println("sql exception in get method of taskHandler class");
+                Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
             }
         }
     }
@@ -82,13 +82,8 @@ public class TaskHandler implements HttpHandler {
             );
         }
         TaskCreateRequest request = gson.fromJson(body, TaskCreateRequest.class);
-        boolean success = repository.uploadTask(request.getTask(), exchange.getRequestHeaders().getFirst("Session-token"));
-        if (success){
-            Response.send(exchange, 201, "");
-        }
-        else{
-            Response.send(exchange, 400, "");
-        }
+        var response = repository.uploadTask(request.getTask(), exchange.getRequestHeaders().getFirst("Session-Token"));
+        Response.send(exchange, response);
     }
 
     void put(HttpExchange exchange) throws IOException{
@@ -104,15 +99,11 @@ public class TaskHandler implements HttpHandler {
                 );
             }
             TaskUpdateRequest request = gson.fromJson(body, TaskUpdateRequest.class);
-            boolean success = repository.updateTask(request.getTask(), Integer.parseInt(tokens[3]), exchange.getRequestHeaders().getFirst("Session-token"));
-            if (success) {
-                Response.send(exchange, 204, "");
-            } else {
-                Response.send(exchange, 401, "");
-            }
+            var response = repository.updateTask(request.getTask(), Integer.parseInt(tokens[3]), exchange.getRequestHeaders().getFirst("Session-Token"));
+            Response.send(exchange, response);
             return;
         }
-        Response.send(exchange, 500, "");
+        Response.send(exchange, new RepositoryResponse<>(Code.BAD_REQUEST));
     }
 
     void delete(HttpExchange exchange) throws IOException {
@@ -122,24 +113,21 @@ public class TaskHandler implements HttpHandler {
 
         if(tokens.length == 4){
             String id = tokens[3];
-            boolean success;
             try {
-                success = repository.deleteTask(Integer.parseInt(id), exchange.getRequestHeaders().getFirst("Session-token"));
+                var response = repository.deleteTask(Integer.parseInt(id), exchange.getRequestHeaders().getFirst("Session-Token"));
+                Response.send(exchange, response);
             }
             catch (NumberFormatException e){
-                Response.send(exchange, 404, "");
-                return;
-            }
-            if (success){
-                Response.send(exchange, 204, "");
-            }
-            else{
-                Response.send(exchange, 401, "");
+                Response.send(exchange, new RepositoryResponse<>(Code.NOT_FOUND));
             }
         }
     }
 
     void error(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 400, "");
+        //Response.send(exchange, 400, "");
+    }
+
+    public void options(HttpExchange exchange) throws IOException {
+        Response.send(exchange, new RepositoryResponse<>(Code.OK));
     }
 }

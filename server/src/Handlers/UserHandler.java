@@ -1,8 +1,10 @@
 package Handlers;
 
 import DataBaseInteractor.UserRepository;
+import Enums.Code;
 import Requests.RegistrationRequest;
 import Requests.UserUpdateRequest;
+import Resources.RepositoryResponse;
 import Responses.RegistrationResponse;
 import Responses.Response;
 import com.google.gson.Gson;
@@ -25,6 +27,9 @@ public class UserHandler implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange){
+        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "http://localhost:5173");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, PUT, DELETE, OPTIONS");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Session-Token");
         try {
             String method = exchange.getRequestMethod();
             switch (method) {
@@ -32,6 +37,7 @@ public class UserHandler implements HttpHandler {
                 case "GET" -> get(exchange); // get user
                 case "PUT" -> put(exchange); // update user
                 case "DELETE" -> delete(exchange); // delete user
+                case "OPTIONS" -> options(exchange);
                 default -> error(exchange);
             }
         }
@@ -40,7 +46,7 @@ public class UserHandler implements HttpHandler {
         }
     }
 
-    public void post(HttpExchange exchange){
+    public void post(HttpExchange exchange) throws IOException {
         String body;
         try(InputStream is = exchange.getRequestBody()) {
             body = new String(
@@ -48,24 +54,20 @@ public class UserHandler implements HttpHandler {
                     StandardCharsets.UTF_8
             );
             RegistrationRequest requestWrapper = gson.fromJson(body, RegistrationRequest.class);
-            int id = repository.register(requestWrapper);
-            if (id != 0){
-                Response.send(exchange, 201, gson.toJson(new RegistrationResponse(id)));
-            }
-            else{
-                Response.send(exchange, 404, "");
-            }
+            var response = repository.register(requestWrapper);
+            Response.send(exchange, response);
         }
         catch (IOException e) {
             System.out.println("problem in post method of UserHandler class");
+            Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
         }
     }
 
     public void get(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 405, "");
+        //Response.send(exchange, 405, "");
     }
 
-    public void put(HttpExchange exchange){
+    public void put(HttpExchange exchange) throws IOException {
         String body;
         try(InputStream is = exchange.getRequestBody()) {
             body = new String(
@@ -74,46 +76,40 @@ public class UserHandler implements HttpHandler {
             );
 
             UserUpdateRequest requestWrapper = gson.fromJson(body, UserUpdateRequest.class);
-            boolean success = repository.update(requestWrapper, exchange.getRequestHeaders().getFirst("Session-token"));
-
-            if (success){
-                Response.send(exchange, 201, "");
-            }
-            else{
-                Response.send(exchange, 401, "");
-            }
+            var response = repository.update(requestWrapper, exchange.getRequestHeaders().getFirst("Session-Token"));
+            Response.send(exchange, response);
         }
         catch (IOException e) {
             System.out.println("problem in put method of UserHandler class");
+            Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
         }
     }
 
-    public void delete(HttpExchange exchange){
+    public void delete(HttpExchange exchange) throws IOException {
         URI uri = exchange.getRequestURI();
         String path = uri.getPath();
         String[] tokens = path.split("/");
         try {
             if (tokens.length == 3) {
-                Response.send(exchange, 405, "");
+                Response.send(exchange, new RepositoryResponse<>(Code.BAD_REQUEST));
                 return;
             }
 
-            boolean success = repository.delete(Integer.parseInt(tokens[3]), exchange.getRequestHeaders().getFirst("Session-token"));
-
-            if (success) {
-                Response.send(exchange, 201, "");
-            } else {
-                Response.send(exchange, 401, "");
-            }
+            var response = repository.delete(Integer.parseInt(tokens[3]), exchange.getRequestHeaders().getFirst("Session-Token"));
+            Response.send(exchange, response);
         }
         catch (Exception e){
             System.out.println("problem in delete method of userHandler class");
+            Response.send(exchange, new RepositoryResponse<>(Code.SERVER_ERROR));
         }
 
     }
 
     public void error(HttpExchange exchange) throws IOException {
-        Response.send(exchange, 405, "");
+        //Response.send(exchange, 405, "");
     }
 
+    public void options(HttpExchange exchange) throws IOException {
+        Response.send(exchange, new RepositoryResponse<>(Code.OK));
+    }
 }

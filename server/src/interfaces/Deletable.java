@@ -1,5 +1,7 @@
 package interfaces;
 
+import Resources.RepositoryResponse;
+
 public interface Deletable {
-    boolean deleteTask(int id, String token);
+    RepositoryResponse deleteTask(int id, String token);
 }
